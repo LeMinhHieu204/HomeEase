@@ -37,3 +37,6 @@ vendor/
 /storage/framework/cache/*
 /storage/framework/sessions/*
 /storage/framework/views/*
+
+/agents/skills/
+/.claude/skills/
