@@ -1,0 +1,5 @@
+@extends('layouts.app')
+
+@section('content')
+<section class="account-dashboard"><div class="container"><div class="account-dashboard__head"><div><span class="eyebrow">Your account</span><h1>Order history.</h1></div></div><div class="account-dashboard__grid"><aside class="account-sidebar"><a href="{{ route('account') }}">Overview</a><a href="{{ route('account.profile') }}">Profile</a><a class="is-active" href="{{ route('account.orders') }}">Orders</a><a href="{{ route('account.addresses') }}">Addresses</a></aside><div class="account-content"><div class="account-panel">@forelse($orders as $order)<a class="account-order-row" href="{{ route('account.order', $order) }}"><div><strong>{{ $order->number }}</strong><small>{{ $order->created_at->format('M d, Y') }} · {{ $order->items->sum('quantity') }} items</small></div><span class="order-status">{{ str_replace('_', ' ', $order->status) }}</span><b>${{ number_format($order->grand_total, 2) }}</b></a>@empty<p class="account-empty">You haven’t placed an order yet.</p>@endforelse</div><div class="pagination">{{ $orders->links() }}</div></div></div></div></section>
+@endsection

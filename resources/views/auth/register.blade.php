@@ -1,0 +1,5 @@
+@extends('layouts.app')
+
+@section('content')
+<section class="account-page"><div class="container account-card"><div class="account-card__intro"><span class="eyebrow">Join HomeEase</span><h1>A little more<br><em>ease, ahead.</em></h1><p>Create an account to save favorites, follow orders and keep your everyday essentials close.</p></div><form class="account-form" action="{{ route('register.store') }}" method="POST">@csrf<label>Full name<input type="text" name="name" value="{{ old('name') }}" required autocomplete="name"></label><label>Email address<input type="email" name="email" value="{{ old('email') }}" required autocomplete="email"></label><label>Password<input type="password" name="password" required autocomplete="new-password" minlength="8"></label><label>Confirm password<input type="password" name="password_confirmation" required autocomplete="new-password" minlength="8"></label><button class="button button--dark button--full" type="submit">Create account <span>↗</span></button><p class="form-foot">Already have an account? <a href="{{ route('login') }}">Sign in</a></p></form></div></section>
+@endsection
