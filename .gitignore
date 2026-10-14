@@ -40,3 +40,4 @@ vendor/
 
 /agents/skills/
 /.claude/skills/
+/.agents/skills/
