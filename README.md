@@ -76,9 +76,9 @@ The screenshots below are captured from the repository's Phase 4 responsive visu
 - Wishlist toggling and a persisted newsletter subscription flow.
 - Registration, login, logout, password reset routes, and inactive-account rejection.
 - Authenticated account pages for profile, password, addresses, order history, and order details.
-- Transactional checkout with server-side totals, standard and express shipping, coupon validation, inventory locking, stock decrement, order items, payments, and shipments.
+- Transactional checkout with server-side totals, standard and express shipping, coupon validation, inventory locking, payment reservations with expiry, order items, and shipment creation only after payment succeeds.
 - Payment gateway abstraction with Stripe support and a fake gateway for automated tests.
-- Stripe webhook signature validation and idempotent payment-event handling.
+- Stripe webhook signature validation, idempotent payment-event reconciliation, failed/expired reservation release, and refund state handling.
 
 ### Admin and content management
 
@@ -223,6 +223,14 @@ Run the PHPUnit suite with the test database configured in `phpunit.xml`:
 php artisan test --compact
 ```
 
+When MySQL is not available, use the bounded local SQLite smoke configuration for application-level regression only:
+
+```powershell
+php artisan test --configuration=phpunit.sqlite.xml --filter="PaymentWebhookTest|OrderAndPaymentTest"
+```
+
+This does not replace the MySQL integration suite; it prevents a missing local MySQL service from being mistaken for an application deadlock.
+
 The browser smoke suite checks the homepage, Kitchen catalog, and Journal listing across six viewport widths and verifies that the category paginator remains usable:
 
 ```powershell
@@ -242,7 +250,7 @@ See the [image asset manifest](docs/IMAGE_ASSET_MANIFEST.md) for the audit, sour
 - [x] Catalog browsing, product detail, search, filtering, sorting, and pagination.
 - [x] Guest and authenticated cart flows with inventory-aware quantities.
 - [x] Customer authentication, account management, addresses, and order history.
-- [x] Transactional checkout, coupons, shipping calculation, inventory updates, and payment abstraction.
+- [x] Transactional checkout, coupons, shipping calculation, inventory reservations, payment abstraction, and compensation paths.
 - [x] Custom role-protected admin and journal/content management surfaces.
 - [x] Responsive visual QA captures for the core storefront pages.
 - [ ] Configure Stripe sandbox credentials and run provider-backed payment verification.

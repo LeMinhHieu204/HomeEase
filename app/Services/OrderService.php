@@ -30,7 +30,7 @@ class OrderService
             $discount = $coupon?->discountFor($subtotal) ?? 0;
             $shipping = ($data['shipping_method'] ?? 'standard') === 'express' ? 14.00 : (($subtotal - $discount) >= 49 ? 0 : 6.99);
             $total = round($subtotal - $discount + $shipping, 2);
-            $order = Order::create(['user_id' => $user?->id, 'number' => 'HE-' . now()->format('Ymd') . '-' . Str::upper(Str::random(6)), 'status' => 'awaiting_payment', 'payment_status' => 'pending', 'currency' => 'USD', 'subtotal' => $subtotal, 'discount_total' => $discount, 'shipping_total' => $shipping, 'tax_total' => 0, 'grand_total' => $total, 'email' => $data['email'], 'shipping_method' => $data['shipping_method'] ?? 'standard', 'coupon_code' => $coupon?->code, 'shipping_address' => $data['shipping_address'], 'billing_address' => $data['shipping_address'], 'placed_at' => now()]);
+            $order = Order::create(['user_id' => $user?->id, 'number' => 'HE-' . now()->format('Ymd') . '-' . Str::upper(Str::random(6)), 'status' => 'awaiting_payment', 'payment_status' => 'pending', 'currency' => 'USD', 'subtotal' => $subtotal, 'discount_total' => $discount, 'shipping_total' => $shipping, 'tax_total' => 0, 'grand_total' => $total, 'email' => $data['email'], 'shipping_method' => $data['shipping_method'] ?? 'standard', 'coupon_code' => $coupon?->code, 'shipping_address' => $data['shipping_address'], 'billing_address' => $data['shipping_address'], 'placed_at' => now(), 'payment_expires_at' => now()->addMinutes(30)]);
 
             foreach ($items as $item) {
                 $inventory = Inventory::query()->lockForUpdate()->where('product_id', $item->product_id)->when($item->variant_id, fn ($q) => $q->where('variant_id', $item->variant_id), fn ($q) => $q->whereNull('variant_id'))->first();
@@ -45,10 +45,40 @@ class OrderService
             $result = $this->payments->gateway()->createPayment($order, $idempotencyKey);
             $payment->update(['provider_payment_id' => $result->providerPaymentId, 'status' => $result->status, 'raw_response' => $result->payload, 'paid_at' => $result->succeeded() ? now() : null]);
             $order->update(['payment_status' => $result->succeeded() ? 'paid' : 'requires_action', 'status' => $result->succeeded() ? 'processing' : 'awaiting_payment']);
-            Shipment::create(['order_id' => $order->id, 'status' => 'pending']);
+            if ($result->succeeded()) Shipment::firstOrCreate(['order_id' => $order->id], ['status' => 'pending']);
             if ($coupon) { $coupon->increment('uses_count'); CouponRedemption::create(['coupon_id' => $coupon->id, 'user_id' => $user?->id, 'order_id' => $order->id]); }
             $this->cart->clear();
             return $order->fresh(['items', 'payment']);
         });
+    }
+
+    public function releaseReservation(Order $order, string $reason = 'Payment failed or expired.'): bool
+    {
+        return DB::transaction(function () use ($order, $reason): bool {
+            $locked = Order::query()->with('items')->lockForUpdate()->find($order->id);
+            if (! $locked || $locked->inventory_released_at) return false;
+
+            foreach ($locked->items as $item) {
+                $inventory = Inventory::query()->lockForUpdate()->where('product_id', $item->product_id)->when($item->variant_id, fn ($q) => $q->where('variant_id', $item->variant_id), fn ($q) => $q->whereNull('variant_id'))->first();
+                if ($inventory) $inventory->increment('quantity', $item->quantity);
+                $product = \App\Models\Product::query()->lockForUpdate()->find($item->product_id);
+                if ($product) $product->increment('stock', $item->quantity);
+            }
+
+            $locked->update(['inventory_released_at' => now(), 'status' => 'cancelled', 'payment_status' => 'failed']);
+            $locked->payment()->update(['status' => 'failed']);
+            Shipment::query()->where('order_id', $locked->id)->where('status', 'pending')->delete();
+            return true;
+        });
+    }
+
+    public function releaseExpiredReservations(): int
+    {
+        $released = 0;
+        Order::query()->whereIn('payment_status', ['pending', 'requires_action'])->whereIn('status', ['awaiting_payment', 'pending'])->whereNotNull('payment_expires_at')->where('payment_expires_at', '<=', now())->pluck('id')->each(function (int $orderId) use (&$released): void {
+            $order = Order::find($orderId);
+            if ($order && $this->releaseReservation($order, 'Payment reservation expired.')) $released++;
+        });
+        return $released;
     }
 }
